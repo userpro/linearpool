@@ -1,4 +1,4 @@
-module memorypool
+module github.com/userpro/linearpool
 
 go 1.20
 
