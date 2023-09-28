@@ -24,7 +24,7 @@ var (
 
 	allocatorPool = sync.Pool{
 		New: func() any {
-			ac := &Allocator{}
+			ac := &Allocator{bidx: -1}
 			ac.newBlock()
 			return ac
 		},
@@ -69,17 +69,15 @@ func (ac *Allocator) newBlock() *sliceHeader {
 
 func (ac *Allocator) reset() {
 	ac.bidx = 0
-	ac.curBlock = nil
+	ac.curBlock = ac.blocks[0]
 	for _, b := range ac.blocks {
 		b.Len = 0
 	}
-	ac.blocks = ac.blocks[:0]
+	ac.blocks = ac.blocks[:1]
 	ac.hugeBlocks = nil // 大对象直接释放 避免过多占用内存
 }
 
 func (ac *Allocator) alloc(need int64, zero bool) unsafe.Pointer {
-	// defer ac.Debug()
-
 	if need == 0 && BugfixCorruptOtherMem {
 		return nil
 	}
@@ -123,7 +121,7 @@ func (ac *Allocator) alloc(need int64, zero bool) unsafe.Pointer {
 }
 
 // ReturnAlloctorToPool 归还分配池
-func ReturnAlloctorToPool(ac *Allocator) {
+func (ac *Allocator) ReturnAlloctorToPool() {
 	ac.reset()
 	allocatorPool.Put(ac)
 }

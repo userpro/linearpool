@@ -28,6 +28,7 @@ func TestNew(t *testing.T) {
 	ac.Debug()
 	assert.EqualValues(t, a.a, "hello")
 	assert.EqualValues(t, a.b, 12)
+	runtime.KeepAlive(ac)
 }
 
 func TestNewSlice(t *testing.T) {
@@ -60,6 +61,7 @@ func TestNewSlice(t *testing.T) {
 
 	assert.EqualValues(t, "bnihaob", b[0].a)
 	assert.EqualValues(t, 123, b[0].b)
+	runtime.KeepAlive(ac)
 }
 
 func TestSliceAppend(t *testing.T) {
@@ -75,6 +77,7 @@ func TestSliceAppend(t *testing.T) {
 	assert.EqualValues(t, a[1].b, 21)
 	assert.EqualValues(t, a[99999].a, "nihao2")
 	assert.EqualValues(t, a[99999].b, 21)
+	runtime.KeepAlive(ac)
 }
 
 func TestAllocPool(t *testing.T) {
@@ -85,7 +88,8 @@ func TestAllocPool(t *testing.T) {
 	t.Logf("%s %d\n", a.a, a.b)
 	assert.EqualValues(t, a.a, "hello")
 	assert.EqualValues(t, a.b, 12)
-	ReturnAlloctorToPool(ac)
+	ac.ReturnAlloctorToPool()
+	runtime.KeepAlive(ac)
 
 	ac = NewAlloctorFromPool()
 	a = New[testNew](ac)
@@ -94,4 +98,5 @@ func TestAllocPool(t *testing.T) {
 	t.Logf("%s %d\n", a.a, a.b)
 	assert.EqualValues(t, a.a, "ni")
 	assert.EqualValues(t, a.b, 1123)
+	runtime.KeepAlive(ac)
 }
