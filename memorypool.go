@@ -94,35 +94,35 @@ func (ac *Allocator) alloc(need int64, zero bool) unsafe.Pointer {
 		needAligned = (need + ptrSize + 1) & ^(ptrSize - 1)
 	}
 
-	// 分配巨型对象
-	if ac.blockSize < needAligned {
-		b := ac.newBlockWithSz(needAligned)
-		ptr := b.Data
+	// 分配小型对象
+	if ac.blockSize >= needAligned {
+		b := ac.curBlock
+		if b.Len+int64(needAligned) > b.Cap {
+			ac.bidx++
+			if len(ac.blocks) <= ac.bidx {
+				b = ac.newBlock()
+			}
+		}
+
+		ptr := unsafe.Add(b.Data, b.Len)
 		if zero {
 			memclrNoHeapPointers(ptr, uintptr(needAligned))
 		}
-		b.Len = b.Cap
-		// fmt.Printf("huge alloc zero: %v, need: %d, needAligned: %d, cap: %d, %v - %v\n",
-		// 	zero, need, needAligned, b.Cap, b.Data, unsafe.Add(b.Data, b.Cap-1))
+		b.Len += needAligned
+		// fmt.Printf("bidx: %d, zero: %v, alloc need: %d, needAligned: %d, len: %d, %v - %v\n",
+		// 	ac.bidx, zero, need, needAligned, b.Len, ptr, unsafe.Add(b.Data, b.Cap-1))
 		return ptr
 	}
 
-	// 分配小型对象
-	b := ac.curBlock
-	if b.Len+int64(needAligned) > b.Cap {
-		ac.bidx++
-		if len(ac.blocks) <= ac.bidx {
-			b = ac.newBlock()
-		}
-	}
-
-	ptr := unsafe.Add(b.Data, b.Len)
+	// 分配巨型对象
+	b := ac.newBlockWithSz(needAligned)
+	ptr := b.Data
 	if zero {
 		memclrNoHeapPointers(ptr, uintptr(needAligned))
 	}
-	b.Len += needAligned
-	// fmt.Printf("bidx: %d, zero: %v, alloc need: %d, needAligned: %d, len: %d, %v - %v\n",
-	// 	ac.bidx, zero, need, needAligned, b.Len, ptr, unsafe.Add(b.Data, b.Cap-1))
+	b.Len = b.Cap
+	// fmt.Printf("huge alloc zero: %v, need: %d, needAligned: %d, cap: %d, %v - %v\n",
+	// 	zero, need, needAligned, b.Cap, b.Data, unsafe.Add(b.Data, b.Cap-1))
 	return ptr
 }
 
