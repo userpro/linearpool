@@ -2,7 +2,6 @@ package memorypool
 
 import (
 	"fmt"
-	"reflect"
 	"sync"
 	"unsafe"
 )
@@ -78,12 +77,13 @@ func (ac *Allocator) reset() {
 	ac.curBlock = ac.blocks[0]
 	for _, b := range ac.blocks {
 		b.Len = 0
+		memclrNoHeapPointers(b.Data, uintptr(ac.blockSize))
 	}
 	ac.blocks = ac.blocks[:1]
 	ac.hugeBlocks = nil // 大对象直接释放 避免过多占用内存
 }
 
-func (ac *Allocator) alloc(need int64, zero bool) unsafe.Pointer {
+func (ac *Allocator) alloc(need int64) unsafe.Pointer {
 	if need == 0 && BugfixCorruptOtherMem {
 		return nil
 	}
@@ -105,9 +105,6 @@ func (ac *Allocator) alloc(need int64, zero bool) unsafe.Pointer {
 		}
 
 		ptr := unsafe.Add(b.Data, b.Len)
-		if zero {
-			memclrNoHeapPointers(ptr, uintptr(needAligned))
-		}
 		b.Len += needAligned
 		// fmt.Printf("bidx: %d, zero: %v, alloc need: %d, needAligned: %d, len: %d, %v - %v\n",
 		// 	ac.bidx, zero, need, needAligned, b.Len, ptr, unsafe.Add(b.Data, b.Cap-1))
@@ -117,9 +114,6 @@ func (ac *Allocator) alloc(need int64, zero bool) unsafe.Pointer {
 	// 分配巨型对象
 	b := ac.newBlockWithSz(needAligned)
 	ptr := b.Data
-	if zero {
-		memclrNoHeapPointers(ptr, uintptr(needAligned))
-	}
 	b.Len = b.Cap
 	// fmt.Printf("huge alloc zero: %v, need: %d, needAligned: %d, cap: %d, %v - %v\n",
 	// 	zero, need, needAligned, b.Cap, b.Data, unsafe.Add(b.Data, b.Cap-1))
@@ -138,7 +132,7 @@ func New[T any](ac *Allocator) (r *T) {
 		return new(T)
 	}
 
-	r = (*T)(ac.alloc(int64(unsafe.Sizeof(*r)), true))
+	r = (*T)(ac.alloc(int64(unsafe.Sizeof(*r))))
 	return r
 }
 
@@ -161,15 +155,9 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 	}
 
 	slice := (*sliceHeader)(unsafe.Pointer(&r))
-	var t1 *T
-	var t2 T
-	// FIX: invalid pointer in the allocated memory may cause panic in the write barrier.
-	zero := mayContainsPtr(reflect.TypeOf(t1).Elem().Kind())
-	if !BugfixClearPointerInMem {
-		zero = false
-	}
-	// fmt.Println(cap, unsafe.Sizeof(t2), zero)
-	slice.Data = ac.alloc(int64(cap)*int64(unsafe.Sizeof(t2)), zero)
+	var t T
+	// fmt.Println(cap, unsafe.Sizeof(t2))
+	slice.Data = ac.alloc(int64(cap) * int64(unsafe.Sizeof(t)))
 	slice.Len = int64(len)
 	slice.Cap = int64(cap)
 	return r
@@ -198,21 +186,8 @@ func Append[T any](ac *Allocator, s []T, elems ...T) []T {
 		}
 
 		sz := int(h.Cap) * elemSz
-		h.Data = ac.alloc(int64(sz), false)
+		h.Data = ac.alloc(int64(sz))
 		memmoveNoHeapPointers(h.Data, pre.Data, uintptr(int(pre.Len)*elemSz))
-
-		// clear the reset part
-
-		// FIX: invalid pointer in the allocated memory may cause panic in the write barrier.
-		var t *T
-		zero := mayContainsPtr(reflect.TypeOf(t).Elem().Kind())
-		if !BugfixClearPointerInMem {
-			zero = false
-		}
-		if zero {
-			used := elemSz * int(pre.Len)
-			memclrNoHeapPointers(unsafe.Add(h.Data, used), uintptr(sz-used))
-		}
 	}
 
 	// append
@@ -231,7 +206,7 @@ func (ac *Allocator) NewString(v string) string {
 		return ""
 	}
 	h := (*stringHeader)(unsafe.Pointer(&v))
-	ptr := ac.alloc(int64(h.Len), false)
+	ptr := ac.alloc(int64(h.Len))
 	if ptr != nil {
 		memmoveNoHeapPointers(ptr, h.Data, uintptr(h.Len))
 	}
@@ -266,7 +241,7 @@ func (ac *Allocator) Bool(v bool) (r *bool) {
 	if ac == nil {
 		r = new(bool)
 	} else {
-		r = (*bool)(ac.alloc(int64(unsafe.Sizeof(v)), false))
+		r = (*bool)(ac.alloc(int64(unsafe.Sizeof(v))))
 	}
 	*r = v
 	return
@@ -276,7 +251,7 @@ func (ac *Allocator) Int(v int) (r *int) {
 	if ac == nil {
 		r = new(int)
 	} else {
-		r = (*int)(ac.alloc(int64(unsafe.Sizeof(v)), false))
+		r = (*int)(ac.alloc(int64(unsafe.Sizeof(v))))
 	}
 	*r = v
 	return
@@ -286,7 +261,7 @@ func (ac *Allocator) Int32(v int32) (r *int32) {
 	if ac == nil {
 		r = new(int32)
 	} else {
-		r = (*int32)(ac.alloc(int64(unsafe.Sizeof(v)), false))
+		r = (*int32)(ac.alloc(int64(unsafe.Sizeof(v))))
 	}
 	*r = v
 	return
@@ -296,7 +271,7 @@ func (ac *Allocator) Uint32(v uint32) (r *uint32) {
 	if ac == nil {
 		r = new(uint32)
 	} else {
-		r = (*uint32)(ac.alloc(int64(unsafe.Sizeof(v)), false))
+		r = (*uint32)(ac.alloc(int64(unsafe.Sizeof(v))))
 	}
 	*r = v
 	return
@@ -306,7 +281,7 @@ func (ac *Allocator) Int64(v int64) (r *int64) {
 	if ac == nil {
 		r = new(int64)
 	} else {
-		r = (*int64)(ac.alloc(int64(unsafe.Sizeof(v)), false))
+		r = (*int64)(ac.alloc(int64(unsafe.Sizeof(v))))
 	}
 	*r = v
 	return
@@ -316,7 +291,7 @@ func (ac *Allocator) Uint64(v uint64) (r *uint64) {
 	if ac == nil {
 		r = new(uint64)
 	} else {
-		r = (*uint64)(ac.alloc(int64(unsafe.Sizeof(v)), false))
+		r = (*uint64)(ac.alloc(int64(unsafe.Sizeof(v))))
 	}
 	*r = v
 	return
@@ -326,7 +301,7 @@ func (ac *Allocator) Float32(v float32) (r *float32) {
 	if ac == nil {
 		r = new(float32)
 	} else {
-		r = (*float32)(ac.alloc(int64(unsafe.Sizeof(v)), false))
+		r = (*float32)(ac.alloc(int64(unsafe.Sizeof(v))))
 	}
 	*r = v
 	return
@@ -336,7 +311,7 @@ func (ac *Allocator) Float64(v float64) (r *float64) {
 	if ac == nil {
 		r = new(float64)
 	} else {
-		r = (*float64)(ac.alloc(int64(unsafe.Sizeof(v)), false))
+		r = (*float64)(ac.alloc(int64(unsafe.Sizeof(v))))
 	}
 	*r = v
 	return
@@ -350,7 +325,7 @@ func (ac *Allocator) String(v string) (r *string) {
 		// FIX: invalid pointer in the allocated memory may cause panic in the write barrier.
 		const zero = true
 
-		r = (*string)(ac.alloc(int64(unsafe.Sizeof(v)), zero))
+		r = (*string)(ac.alloc(int64(unsafe.Sizeof(v))))
 		*r = ac.NewString(v)
 	}
 	return
