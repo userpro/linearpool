@@ -33,6 +33,7 @@ var (
 
 // Allocator 分配器
 type Allocator struct {
+	blockSize  int64
 	curBlock   *sliceHeader
 	blocks     []*sliceHeader
 	hugeBlocks []*sliceHeader
@@ -40,8 +41,13 @@ type Allocator struct {
 }
 
 // NewAlloctorFromPool 新建分配池
-func NewAlloctorFromPool() *Allocator {
-	return allocatorPool.Get().(*Allocator)
+func NewAlloctorFromPool(sz int64) *Allocator {
+	ac := allocatorPool.Get().(*Allocator)
+	if sz <= 0 {
+		sz = blockSize
+	}
+	ac.blockSize = sz
+	return ac
 }
 
 func (ac *Allocator) newBlockWithSz(need int64) *sliceHeader {
@@ -60,7 +66,7 @@ func (ac *Allocator) newBlock() *sliceHeader {
 		return b
 	}
 
-	t := make([]byte, 0, blockSize)
+	t := make([]byte, 0, ac.blockSize)
 	b := (*sliceHeader)(unsafe.Pointer(&t))
 	ac.curBlock = b
 	ac.blocks = append(ac.blocks, b)
@@ -89,7 +95,7 @@ func (ac *Allocator) alloc(need int64, zero bool) unsafe.Pointer {
 	}
 
 	// 分配巨型对象
-	if blockSize < needAligned {
+	if ac.blockSize < needAligned {
 		b := ac.newBlockWithSz(needAligned)
 		ptr := b.Data
 		if zero {

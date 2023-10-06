@@ -18,7 +18,7 @@ type testNew struct {
 }
 
 func TestNew(t *testing.T) {
-	ac := NewAlloctorFromPool()
+	ac := NewAlloctorFromPool(0)
 	a := New[testNew](ac)
 	a.a = ac.NewString("hello")
 	a.b = 12
@@ -32,7 +32,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestNewSlice(t *testing.T) {
-	ac := NewAlloctorFromPool()
+	ac := NewAlloctorFromPool(0)
 	f := func() *testNewF {
 		tf := New[testNewF](ac)
 		a := NewSlice[*testNew](ac, 1, 1)
@@ -65,7 +65,7 @@ func TestNewSlice(t *testing.T) {
 }
 
 func TestSliceAppend(t *testing.T) {
-	ac := NewAlloctorFromPool()
+	ac := NewAlloctorFromPool(0)
 	a := NewSlice[testNew](ac, 0, 1)
 	for i := 0; i < 100_000; i++ {
 		a = Append[testNew](ac, a, []testNew{{a: "nihao", b: 12}, {a: "nihao2", b: 21}}...)
@@ -81,7 +81,7 @@ func TestSliceAppend(t *testing.T) {
 }
 
 func TestAllocPool(t *testing.T) {
-	ac := NewAlloctorFromPool()
+	ac := NewAlloctorFromPool(0)
 	a := New[testNew](ac)
 	a.a = ac.NewString("hello")
 	a.b = 12
@@ -91,7 +91,7 @@ func TestAllocPool(t *testing.T) {
 	ac.ReturnAlloctorToPool()
 	runtime.KeepAlive(ac)
 
-	ac = NewAlloctorFromPool()
+	ac = NewAlloctorFromPool(0)
 	a = New[testNew](ac)
 	a.a = ac.NewString("ni")
 	a.b = 1123
