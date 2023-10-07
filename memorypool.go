@@ -76,8 +76,10 @@ func (ac *Allocator) reset() {
 	ac.bidx = 0
 	ac.curBlock = ac.blocks[0]
 	for _, b := range ac.blocks {
-		b.Len = 0
-		memclrNoHeapPointers(b.Data, uintptr(ac.blockSize))
+		if b.Len > 0 {
+			memclrNoHeapPointers(b.Data, uintptr(b.Len))
+			b.Len = 0
+		}
 	}
 	ac.blocks = ac.blocks[:1]
 	ac.hugeBlocks = nil // 大对象直接释放 避免过多占用内存
