@@ -72,6 +72,7 @@ func (ac *Allocator) newBlock() *sliceHeader {
 	return b
 }
 
+// Reset 重置内存信息
 func (ac *Allocator) Reset() {
 	ac.bidx = 0
 	ac.curBlock = ac.blocks[0]
