@@ -72,7 +72,7 @@ func (ac *Allocator) newBlock() *sliceHeader {
 	return b
 }
 
-func (ac *Allocator) reset() {
+func (ac *Allocator) Reset() {
 	ac.bidx = 0
 	ac.curBlock = ac.blocks[0]
 	for _, b := range ac.blocks {
@@ -124,7 +124,7 @@ func (ac *Allocator) alloc(need int64) unsafe.Pointer {
 
 // ReturnAlloctorToPool 归还分配池
 func (ac *Allocator) ReturnAlloctorToPool() {
-	ac.reset()
+	ac.Reset()
 	allocatorPool.Put(ac)
 }
 
