@@ -89,7 +89,6 @@ func TestAllocPool(t *testing.T) {
 	assert.EqualValues(t, a.a, "hello")
 	assert.EqualValues(t, a.b, 12)
 	ac.ReturnAlloctorToPool()
-	runtime.KeepAlive(ac)
 
 	ac = NewAlloctorFromPool(0)
 	a = New[testNew](ac)
@@ -98,5 +97,15 @@ func TestAllocPool(t *testing.T) {
 	t.Logf("%s %d\n", a.a, a.b)
 	assert.EqualValues(t, a.a, "ni")
 	assert.EqualValues(t, a.b, 1123)
+	ac.ReturnAlloctorToPool()
+
+	ac = NewAlloctorFromPool(0)
+	a = New[testNew](ac)
+	a.a = ac.NewString("ni")
+	a.b = 1123
+	t.Logf("%s %d\n", a.a, a.b)
+	assert.EqualValues(t, a.a, "ni")
+	assert.EqualValues(t, a.b, 1123)
+
 	runtime.KeepAlive(ac)
 }

@@ -23,9 +23,7 @@ var (
 
 	allocatorPool = sync.Pool{
 		New: func() any {
-			ac := &Allocator{bidx: -1}
-			ac.newBlock()
-			return ac
+			return &Allocator{bidx: -1}
 		},
 	}
 )
@@ -46,6 +44,10 @@ func NewAlloctorFromPool(sz int64) *Allocator {
 		sz = blockSize
 	}
 	ac.blockSize = sz
+
+	if ac.bidx < 0 {
+		ac.newBlock()
+	}
 	return ac
 }
 
@@ -101,16 +103,13 @@ func (ac *Allocator) alloc(need int64) unsafe.Pointer {
 	if ac.blockSize >= needAligned {
 		b := ac.curBlock
 		if b.Len+int64(needAligned) > b.Cap {
-			ac.bidx++
-			if len(ac.blocks) <= ac.bidx {
-				b = ac.newBlock()
-			}
+			b = ac.newBlock()
 		}
 
 		ptr := unsafe.Add(b.Data, b.Len)
 		b.Len += needAligned
-		// fmt.Printf("bidx: %d, zero: %v, alloc need: %d, needAligned: %d, len: %d, %v - %v\n",
-		// 	ac.bidx, zero, need, needAligned, b.Len, ptr, unsafe.Add(b.Data, b.Cap-1))
+		// fmt.Printf("bidx: %d, blocksize: %d, alloc need: %d, needAligned: %d, len: %d, %v - %v\n",
+		// 	ac.bidx, len(ac.blocks), need, needAligned, b.Len, ptr, unsafe.Add(b.Data, b.Cap-1))
 		return ptr
 	}
 
@@ -118,8 +117,8 @@ func (ac *Allocator) alloc(need int64) unsafe.Pointer {
 	b := ac.newBlockWithSz(needAligned)
 	ptr := b.Data
 	b.Len = b.Cap
-	// fmt.Printf("huge alloc zero: %v, need: %d, needAligned: %d, cap: %d, %v - %v\n",
-	// 	zero, need, needAligned, b.Cap, b.Data, unsafe.Add(b.Data, b.Cap-1))
+	// fmt.Printf("huge alloc need: %d, needAligned: %d, cap: %d, %v - %v\n",
+	// 	need, needAligned, b.Cap, b.Data, unsafe.Add(b.Data, b.Cap-1))
 	return ptr
 }
 
