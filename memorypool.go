@@ -128,12 +128,21 @@ func (ac *Allocator) ReturnAlloctorToPool() {
 	allocatorPool.Put(ac)
 }
 
+// BlockSize 获取当前内存池的 blocksize
+func (ac *Allocator) BlockSize() int64 {
+	return ac.blockSize
+}
+
+// Merge 合并其他内存池
+func (ac *Allocator) Merge(src *Allocator) *Allocator {
+	ac.blocks = append(ac.blocks, src.blocks[:src.bidx+1]...)
+	ac.hugeBlocks = append(ac.hugeBlocks, src.hugeBlocks...)
+	ac.bidx = ac.bidx + src.bidx + 1
+	return ac
+}
+
 // New 分配新对象
 func New[T any](ac *Allocator) (r *T) {
-	if ac == nil {
-		return new(T)
-	}
-
 	r = (*T)(ac.alloc(int64(unsafe.Sizeof(*r))))
 	return r
 }
@@ -141,10 +150,6 @@ func New[T any](ac *Allocator) (r *T) {
 // NewSlice does not zero the slice automatically, this is OK with most cases and can improve the performance.
 // zero it yourself for your need.
 func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
-	if ac == nil {
-		return make([]T, len, cap)
-	}
-
 	// keep same with systems `new`.
 	if len > cap {
 		panic("NewSlice: cap out of range")
@@ -165,11 +170,8 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 	return r
 }
 
+// Append append slice
 func Append[T any](ac *Allocator, s []T, elems ...T) []T {
-	if ac == nil {
-		return append(s, elems...)
-	}
-
 	if len(elems) == 0 {
 		return s
 	}
@@ -200,10 +202,8 @@ func Append[T any](ac *Allocator, s []T, elems ...T) []T {
 	return s
 }
 
+// NewString 从内存池分配 string
 func (ac *Allocator) NewString(v string) string {
-	if ac == nil {
-		return v
-	}
 	if len(v) == 0 {
 		return ""
 	}
@@ -216,6 +216,7 @@ func (ac *Allocator) NewString(v string) string {
 	return v
 }
 
+// Debug 输出 debug 信息
 func (ac *Allocator) Debug() {
 	fmt.Printf("\n* bidx: %d\n", ac.bidx)
 	fmt.Printf("* blocks: \n")
@@ -239,96 +240,65 @@ func (ac *Allocator) Debug() {
 // Protobuf2 APIs
 //============================================================================
 
+// Bool ...
 func (ac *Allocator) Bool(v bool) (r *bool) {
-	if ac == nil {
-		r = new(bool)
-	} else {
-		r = (*bool)(ac.alloc(int64(unsafe.Sizeof(v))))
-	}
+	r = (*bool)(ac.alloc(int64(unsafe.Sizeof(v))))
 	*r = v
 	return
 }
 
+// Int ...
 func (ac *Allocator) Int(v int) (r *int) {
-	if ac == nil {
-		r = new(int)
-	} else {
-		r = (*int)(ac.alloc(int64(unsafe.Sizeof(v))))
-	}
+	r = (*int)(ac.alloc(int64(unsafe.Sizeof(v))))
 	*r = v
 	return
 }
 
+// Int32 ...
 func (ac *Allocator) Int32(v int32) (r *int32) {
-	if ac == nil {
-		r = new(int32)
-	} else {
-		r = (*int32)(ac.alloc(int64(unsafe.Sizeof(v))))
-	}
+	r = (*int32)(ac.alloc(int64(unsafe.Sizeof(v))))
 	*r = v
 	return
 }
 
+// Uint32 ...
 func (ac *Allocator) Uint32(v uint32) (r *uint32) {
-	if ac == nil {
-		r = new(uint32)
-	} else {
-		r = (*uint32)(ac.alloc(int64(unsafe.Sizeof(v))))
-	}
+	r = (*uint32)(ac.alloc(int64(unsafe.Sizeof(v))))
 	*r = v
 	return
 }
 
+// Int64 ...
 func (ac *Allocator) Int64(v int64) (r *int64) {
-	if ac == nil {
-		r = new(int64)
-	} else {
-		r = (*int64)(ac.alloc(int64(unsafe.Sizeof(v))))
-	}
+	r = (*int64)(ac.alloc(int64(unsafe.Sizeof(v))))
 	*r = v
 	return
 }
 
+// Uint64 ...
 func (ac *Allocator) Uint64(v uint64) (r *uint64) {
-	if ac == nil {
-		r = new(uint64)
-	} else {
-		r = (*uint64)(ac.alloc(int64(unsafe.Sizeof(v))))
-	}
+	r = (*uint64)(ac.alloc(int64(unsafe.Sizeof(v))))
 	*r = v
 	return
 }
 
+// Float32 ...
 func (ac *Allocator) Float32(v float32) (r *float32) {
-	if ac == nil {
-		r = new(float32)
-	} else {
-		r = (*float32)(ac.alloc(int64(unsafe.Sizeof(v))))
-	}
+	r = (*float32)(ac.alloc(int64(unsafe.Sizeof(v))))
 	*r = v
 	return
 }
 
+// Float64 ...
 func (ac *Allocator) Float64(v float64) (r *float64) {
-	if ac == nil {
-		r = new(float64)
-	} else {
-		r = (*float64)(ac.alloc(int64(unsafe.Sizeof(v))))
-	}
+	r = (*float64)(ac.alloc(int64(unsafe.Sizeof(v))))
 	*r = v
 	return
 }
 
+// String ...
 func (ac *Allocator) String(v string) (r *string) {
-	if ac == nil {
-		r = new(string)
-		*r = v
-	} else {
-		// FIX: invalid pointer in the allocated memory may cause panic in the write barrier.
-		const zero = true
-
-		r = (*string)(ac.alloc(int64(unsafe.Sizeof(v))))
-		*r = ac.NewString(v)
-	}
+	r = (*string)(ac.alloc(int64(unsafe.Sizeof(v))))
+	*r = ac.NewString(v)
 	return
 }

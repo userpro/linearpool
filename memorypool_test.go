@@ -80,7 +80,7 @@ func TestSliceAppend(t *testing.T) {
 	runtime.KeepAlive(ac)
 }
 
-func TestAllocPool(t *testing.T) {
+func TestAllocPoolReuse(t *testing.T) {
 	ac := NewAlloctorFromPool(0)
 	a := New[testNew](ac)
 	a.a = ac.NewString("hello")
@@ -106,6 +106,51 @@ func TestAllocPool(t *testing.T) {
 	t.Logf("%s %d\n", a.a, a.b)
 	assert.EqualValues(t, a.a, "ni")
 	assert.EqualValues(t, a.b, 1123)
+
+	runtime.KeepAlive(ac)
+}
+
+func TestAllocPoolMerge(t *testing.T) {
+	ac := NewAlloctorFromPool(0)
+	a := New[testNew](ac)
+	a.a = ac.NewString("hello")
+	a.b = 12
+	assert.EqualValues(t, a.a, "hello")
+	assert.EqualValues(t, a.b, 12)
+
+	// 新内存池1
+	ac1 := NewAlloctorFromPool(ac.BlockSize())
+	a1 := New[testNew](ac)
+	a1.a = ac1.NewString("ni1")
+	a1.b = 1123
+	ac.Merge(ac1)
+	runtime.KeepAlive(ac1)
+	assert.EqualValues(t, a1.a, "ni1")
+	assert.EqualValues(t, a1.b, 1123)
+
+	// 新内存池2
+	ac2 := NewAlloctorFromPool(ac.BlockSize())
+	a2 := New[testNew](ac)
+	a2.a = ac2.NewString("ni2")
+	a2.b = 1123
+	ac.Merge(ac2)
+	runtime.KeepAlive(ac2)
+	assert.EqualValues(t, a2.a, "ni2")
+	assert.EqualValues(t, a2.b, 1123)
+
+	// 合并后内存信息
+	assert.EqualValues(t, len(ac.blocks), 3)
+	assert.EqualValues(t, ac.bidx, 2)
+
+	a = New[testNew](ac)
+	a.a = ac.NewString("hello3")
+	a.b = 12
+	assert.EqualValues(t, a.a, "hello3")
+	assert.EqualValues(t, a.b, 12)
+
+	// 再次check内存信息
+	assert.EqualValues(t, len(ac.blocks), 3)
+	assert.EqualValues(t, ac.bidx, 2)
 
 	runtime.KeepAlive(ac)
 }
