@@ -2,6 +2,7 @@ package memorypool
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 	"unsafe"
 )
@@ -36,7 +37,11 @@ type Allocator struct {
 	hugeBlocks []*sliceHeader
 	bidx       int // 当前在第几个 block 进行分配
 
-	externalPtr []unsafe.Pointer
+	externalPtr    weakUniqQueue[unsafe.Pointer]
+	externalSlice  weakUniqQueue[unsafe.Pointer]
+	externalString weakUniqQueue[unsafe.Pointer]
+	externalMap    weakUniqQueue[any]
+	externalFunc   weakUniqQueue[any]
 }
 
 // NewAlloctorFromPool 新建分配池
@@ -122,6 +127,12 @@ func (ac *Allocator) Reset() {
 	}
 	ac.blocks = ac.blocks[:1]
 	ac.hugeBlocks = nil // 大对象直接释放 避免过多占用内存
+
+	ac.externalPtr.Clear()
+	ac.externalSlice.Clear()
+	ac.externalString.Clear()
+	ac.externalMap.Clear()
+	ac.externalFunc.Clear()
 }
 
 // ReturnAlloctorToPool 归还分配池
@@ -150,7 +161,21 @@ func (ac *Allocator) KeepAlive(ptr interface{}) {
 		return
 	}
 
-	ac.externalPtr = append(ac.externalPtr, d)
+	k := reflect.TypeOf(ptr).Kind()
+	switch k {
+	case reflect.Ptr:
+		ac.externalPtr.Put(d)
+	case reflect.Slice:
+		ac.externalSlice.Put((*sliceHeader)(d).Data)
+	case reflect.String:
+		ac.externalString.Put((*stringHeader)(d).Data)
+	case reflect.Map:
+		ac.externalMap.Put(d)
+	case reflect.Func:
+		ac.externalFunc.Put(ptr)
+	default:
+		panic(fmt.Errorf("unsupported type: %v", k))
+	}
 }
 
 // New 分配新对象

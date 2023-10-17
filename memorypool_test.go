@@ -154,3 +154,31 @@ func TestAllocPoolMerge(t *testing.T) {
 
 	runtime.KeepAlive(ac)
 }
+
+type allocKeepTest1 struct {
+	ac *Allocator
+	b  string
+}
+
+func TestKeepAlivePool(t *testing.T) {
+	ac := NewAlloctorFromPool(0)
+	a := New[allocKeepTest1](ac)
+	a.ac = NewAlloctorFromPool(0)
+	a.b = a.ac.NewString("123")
+
+	ac.KeepAlive(a.ac) // !
+	runtime.GC()
+
+	c := []*allocKeepTest1{}
+	for i := 0; i < 100000; i++ {
+		b := New[allocKeepTest1](a.ac)
+		b.b = "321"
+		c = append(c, b)
+	}
+
+	for i := 0; i < 100000; i++ {
+		assert.EqualValues(t, c[i].b, "321")
+	}
+
+	runtime.KeepAlive(ac)
+}
