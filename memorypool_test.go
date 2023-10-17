@@ -1,7 +1,10 @@
 package memorypool
 
 import (
+	"fmt"
+	"math/rand"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,31 +36,34 @@ func TestNew(t *testing.T) {
 
 func TestNewSlice(t *testing.T) {
 	ac := NewAlloctorFromPool(0)
-	f := func() *testNewF {
+	tmpInt := rand.Int31()
+	f := func(tmpstr []byte) *testNewF {
 		tf := New[testNewF](ac)
 		a := NewSlice[*testNew](ac, 1, 1)
 
-		a = Append[*testNew](ac, a, []*testNew{{a: "anihao", b: 12}, {a: "anihao2", b: 122}}...)
-		a = Append[*testNew](ac, a, []*testNew{{a: "anihao3", b: 123}}...)
-		// t.Logf("a[3]: %s %d\n", a[3].a, a[3].b)
+		t1 := New[testNew](ac)
+		t1.a = "anihao" // 常量字符串可以这么操作
+		t1.b = 12
+
+		t2 := New[testNew](ac)
+		t2.a = "anihao2" + string(tmpstr)
+		t2.b = 122
+
+		a = Append[*testNew](ac, a, t1, t2)
 		tf.t = a
 		return tf
 	}
-	tf := f()
+	tf := f([]byte(strconv.Itoa(int(tmpInt))))
 
 	b := NewSlice[testNew](ac, 0, 100)
 	b = Append[testNew](ac, b, []testNew{{a: "bnihaob", b: 123}}...)
-	// t.Logf("b: %p\n", &b)
-	// t.Logf("b[0]: %s %d\n", b[0].a, b[0].b)
 
 	runtime.GC()
 
 	assert.EqualValues(t, "anihao", tf.t[1].a)
 	assert.EqualValues(t, 12, tf.t[1].b)
-	assert.EqualValues(t, "anihao2", tf.t[2].a)
+	assert.EqualValues(t, "anihao2"+strconv.Itoa(int(tmpInt)), tf.t[2].a)
 	assert.EqualValues(t, 122, tf.t[2].b)
-	assert.EqualValues(t, "anihao3", tf.t[3].a)
-	assert.EqualValues(t, 123, tf.t[3].b)
 
 	assert.EqualValues(t, "bnihaob", b[0].a)
 	assert.EqualValues(t, 123, b[0].b)
@@ -65,18 +71,33 @@ func TestNewSlice(t *testing.T) {
 }
 
 func TestSliceAppend(t *testing.T) {
+	maxn := 5_00_000
 	ac := NewAlloctorFromPool(0)
 	a := NewSlice[testNew](ac, 0, 1)
-	for i := 0; i < 100_000; i++ {
+	for i := 0; i < maxn; i++ {
 		a = Append[testNew](ac, a, []testNew{{a: "nihao", b: 12}, {a: "nihao2", b: 21}}...)
 	}
 	t.Logf("%s %d\n", a[0].a, a[0].b)
-	assert.EqualValues(t, a[0].a, "nihao")
-	assert.EqualValues(t, a[0].b, 12)
-	assert.EqualValues(t, a[1].a, "nihao2")
-	assert.EqualValues(t, a[1].b, 21)
-	assert.EqualValues(t, a[99999].a, "nihao2")
-	assert.EqualValues(t, a[99999].b, 21)
+	t.Logf("[first] bidx: %d, blocks: %d\n", ac.bidx, len(ac.blocks))
+
+	for i := 0; i < maxn; i++ {
+		if i%2 != 0 {
+			assert.EqualValues(t, a[i].a, "nihao2")
+			assert.EqualValues(t, a[i].b, 21)
+		} else {
+			assert.EqualValues(t, a[i].a, "nihao")
+			assert.EqualValues(t, a[i].b, 12)
+		}
+	}
+
+	ac.ReturnAlloctorToPool()
+
+	ac = NewAlloctorFromPool(0)
+	a = NewSlice[testNew](ac, 0, 1)
+	for i := 0; i < maxn; i++ {
+		a = Append[testNew](ac, a, []testNew{{a: "nihao", b: 12}, {a: "nihao2", b: 21}}...)
+	}
+	t.Logf("[second] bidx: %d, blocks: %d\n", ac.bidx, len(ac.blocks))
 	runtime.KeepAlive(ac)
 }
 
@@ -164,20 +185,22 @@ func TestKeepAlivePool(t *testing.T) {
 	ac := NewAlloctorFromPool(0)
 	a := New[allocKeepTest1](ac)
 	a.ac = NewAlloctorFromPool(0)
-	a.b = a.ac.NewString("123")
+	a.b = "123"
 
 	ac.KeepAlive(a.ac) // !
 	runtime.GC()
 
-	c := []*allocKeepTest1{}
-	for i := 0; i < 100000; i++ {
+	e := []byte(fmt.Sprintf("nihaocai %d", 1))
+	c := NewSlice[*allocKeepTest1](a.ac, 0, 8)
+	for i := 0; i < 1000000; i++ {
 		b := New[allocKeepTest1](a.ac)
-		b.b = "321"
-		c = append(c, b)
+		b.b = a.ac.NewString(string(e)) // e 需要使用 NewString 来保留
+		c = Append[*allocKeepTest1](a.ac, c, b)
 	}
+	runtime.GC()
 
-	for i := 0; i < 100000; i++ {
-		assert.EqualValues(t, c[i].b, "321")
+	for i := 0; i < 1000000; i++ {
+		assert.EqualValues(t, c[i].b, "nihaocai 1")
 	}
 
 	runtime.KeepAlive(ac)

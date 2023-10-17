@@ -15,9 +15,7 @@ const (
 )
 
 var (
-	// our memory is much cheaper than systems,
-	// so we can be more aggressive than `append`.
-	SliceExtendRatio = 2.5
+	SliceExtendRatio = 2.0
 
 	BugfixClearPointerInMem = true
 	BugfixCorruptOtherMem   = true
@@ -37,11 +35,11 @@ type Allocator struct {
 	hugeBlocks []*sliceHeader
 	bidx       int // 当前在第几个 block 进行分配
 
-	externalPtr    weakUniqQueue[unsafe.Pointer]
-	externalSlice  weakUniqQueue[unsafe.Pointer]
-	externalString weakUniqQueue[unsafe.Pointer]
-	externalMap    weakUniqQueue[any]
-	externalFunc   weakUniqQueue[any]
+	externalPtr    []unsafe.Pointer
+	externalSlice  []unsafe.Pointer
+	externalString []unsafe.Pointer
+	externalMap    []any
+	externalFunc   []any
 }
 
 // NewAlloctorFromPool 新建分配池
@@ -128,11 +126,11 @@ func (ac *Allocator) Reset() {
 	ac.blocks = ac.blocks[:1]
 	ac.hugeBlocks = nil // 大对象直接释放 避免过多占用内存
 
-	ac.externalPtr.Clear()
-	ac.externalSlice.Clear()
-	ac.externalString.Clear()
-	ac.externalMap.Clear()
-	ac.externalFunc.Clear()
+	ac.externalPtr = ac.externalPtr[:0]
+	ac.externalSlice = ac.externalSlice[:0]
+	ac.externalString = ac.externalString[:0]
+	ac.externalMap = ac.externalMap[:0]
+	ac.externalFunc = ac.externalFunc[:0]
 }
 
 // ReturnAlloctorToPool 归还分配池
@@ -151,6 +149,12 @@ func (ac *Allocator) Merge(src *Allocator) *Allocator {
 	ac.blocks = append(ac.blocks, src.blocks[:src.bidx+1]...)
 	ac.hugeBlocks = append(ac.hugeBlocks, src.hugeBlocks...)
 	ac.bidx = ac.bidx + src.bidx + 1
+
+	ac.externalPtr = append(ac.externalPtr, src.externalPtr...)
+	ac.externalSlice = append(ac.externalSlice, src.externalSlice...)
+	ac.externalString = append(ac.externalString, src.externalString...)
+	ac.externalMap = append(ac.externalMap, src.externalMap...)
+	ac.externalFunc = append(ac.externalFunc, src.externalFunc...)
 	return ac
 }
 
@@ -164,15 +168,15 @@ func (ac *Allocator) KeepAlive(ptr interface{}) {
 	k := reflect.TypeOf(ptr).Kind()
 	switch k {
 	case reflect.Ptr:
-		ac.externalPtr.Put(d)
+		ac.externalPtr = append(ac.externalPtr, d)
 	case reflect.Slice:
-		ac.externalSlice.Put((*sliceHeader)(d).Data)
+		ac.externalSlice = append(ac.externalSlice, (*sliceHeader)(d).Data)
 	case reflect.String:
-		ac.externalString.Put((*stringHeader)(d).Data)
+		ac.externalString = append(ac.externalString, (*stringHeader)(d).Data)
 	case reflect.Map:
-		ac.externalMap.Put(d)
+		ac.externalMap = append(ac.externalMap, d)
 	case reflect.Func:
-		ac.externalFunc.Put(ptr)
+		ac.externalFunc = append(ac.externalFunc, ptr)
 	default:
 		panic(fmt.Errorf("unsupported type: %v", k))
 	}
@@ -192,10 +196,7 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 		panic("NewSlice: cap out of range")
 	}
 
-	if BugfixCorruptOtherMem {
-		if cap == 0 {
-			return nil
-		}
+	if BugfixCorruptOtherMem && cap == 0 {
 	}
 
 	slice := (*sliceHeader)(unsafe.Pointer(&r))

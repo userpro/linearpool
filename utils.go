@@ -181,6 +181,7 @@ func (s *spinLock) Unlock() {
 // weakUniqQueue is used to reduce the duplication of elems in queue.
 // the major purpose is to reduce memory usage.
 type weakUniqQueue[T any] struct {
+	spinLock
 	slice     []T
 	uniqRange int
 	equal     func(a, b T) bool
@@ -190,11 +191,17 @@ func newWeakUniqQueue[T any](uniqRange int, eq func(a, b T) bool) weakUniqQueue[
 	return weakUniqQueue[T]{equal: eq, uniqRange: uniqRange}
 }
 
+// Clear ...
 func (e *weakUniqQueue[T]) Clear() {
+	e.Lock()
+	defer e.Unlock()
 	e.slice = nil
 }
 
+// Put ...
 func (e *weakUniqQueue[T]) Put(a T) {
+	e.Lock()
+	defer e.Unlock()
 	if l := len(e.slice); l > 0 {
 		if l < e.uniqRange {
 			for _, k := range e.slice {
