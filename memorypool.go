@@ -35,6 +35,8 @@ type Allocator struct {
 	blocks     []*sliceHeader
 	hugeBlocks []*sliceHeader
 	bidx       int // 当前在第几个 block 进行分配
+
+	externalPtr []unsafe.Pointer
 }
 
 // NewAlloctorFromPool 新建分配池
@@ -74,20 +76,6 @@ func (ac *Allocator) newBlock() *sliceHeader {
 	return b
 }
 
-// Reset 重置内存信息
-func (ac *Allocator) Reset() {
-	ac.bidx = 0
-	ac.curBlock = ac.blocks[0]
-	for _, b := range ac.blocks {
-		if b.Len > 0 {
-			memclrNoHeapPointers(b.Data, uintptr(b.Len))
-			b.Len = 0
-		}
-	}
-	ac.blocks = ac.blocks[:1]
-	ac.hugeBlocks = nil // 大对象直接释放 避免过多占用内存
-}
-
 func (ac *Allocator) alloc(need int64) unsafe.Pointer {
 	if need == 0 && BugfixCorruptOtherMem {
 		return nil
@@ -122,6 +110,20 @@ func (ac *Allocator) alloc(need int64) unsafe.Pointer {
 	return ptr
 }
 
+// Reset 重置内存信息
+func (ac *Allocator) Reset() {
+	ac.bidx = 0
+	ac.curBlock = ac.blocks[0]
+	for _, b := range ac.blocks {
+		if b.Len > 0 {
+			memclrNoHeapPointers(b.Data, uintptr(b.Len))
+			b.Len = 0
+		}
+	}
+	ac.blocks = ac.blocks[:1]
+	ac.hugeBlocks = nil // 大对象直接释放 避免过多占用内存
+}
+
 // ReturnAlloctorToPool 归还分配池
 func (ac *Allocator) ReturnAlloctorToPool() {
 	ac.Reset()
@@ -139,6 +141,16 @@ func (ac *Allocator) Merge(src *Allocator) *Allocator {
 	ac.hugeBlocks = append(ac.hugeBlocks, src.hugeBlocks...)
 	ac.bidx = ac.bidx + src.bidx + 1
 	return ac
+}
+
+// KeepAlive GC保活
+func (ac *Allocator) KeepAlive(ptr interface{}) {
+	d := data(ptr)
+	if d == nil {
+		return
+	}
+
+	ac.externalPtr = append(ac.externalPtr, d)
 }
 
 // New 分配新对象
