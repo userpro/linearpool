@@ -286,9 +286,9 @@ func AppendInplaceMulti[T any](ac *Allocator, s []T, elems ...T) []T {
 }
 
 // AppendInplace 与 NewSlice 之间没有任何新的内存分配时使用
-func AppendInplace[T any](ac *Allocator, s []T, elems T) []T {
+func AppendInplace[T any](ac *Allocator, s []T, elem T) []T {
 	h := (*sliceHeader)(unsafe.Pointer(&s))
-	elemSz := int(unsafe.Sizeof(elems))
+	elemSz := int(unsafe.Sizeof(elem))
 
 	// grow
 	if h.Len+1 > h.Cap {
@@ -305,7 +305,7 @@ func AppendInplace[T any](ac *Allocator, s []T, elems T) []T {
 	}
 
 	// append
-	*(*T)(unsafe.Add(h.Data, elemSz*int(h.Len))) = elems
+	*(*T)(unsafe.Add(h.Data, elemSz*int(h.Len))) = elem
 	h.Len += 1
 
 	return s

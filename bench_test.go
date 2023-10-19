@@ -108,7 +108,8 @@ func BenchmarkIntSlicePoolAllocOne(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for i := 0; i < objnum; i++ {
-			data = AppendInplace[int](ac, data, i)
+			data = append(data, i)
+			// data = AppendInplace[int](ac, data, i)
 		}
 		data = data[:0]
 	}
