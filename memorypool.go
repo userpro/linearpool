@@ -15,8 +15,7 @@ const (
 )
 
 var (
-	SliceExtendRatio = 2.0
-
+	SliceExtendRatio        = 2.5
 	BugfixClearPointerInMem = true
 	BugfixCorruptOtherMem   = true
 
@@ -208,34 +207,106 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 	return r
 }
 
-// Append append slice
-func Append[T any](ac *Allocator, s []T, elems ...T) []T {
+// AppendMulti append slice
+func AppendMulti[T any](ac *Allocator, s []T, elems ...T) []T {
 	if len(elems) == 0 {
 		return s
 	}
 
 	h := (*sliceHeader)(unsafe.Pointer(&s))
 	elemSz := int(unsafe.Sizeof(elems[0]))
+	src := (*sliceHeader)(unsafe.Pointer(&elems))
 
 	// grow
-	if h.Len >= h.Cap {
+	if h.Len+src.Len > h.Cap {
 		pre := *h
-
-		cur := float64(h.Cap)
-		h.Cap = max(int64(cur*SliceExtendRatio), pre.Cap+int64(len(elems)))
-		if h.Cap < 16 {
-			h.Cap = 16
-		}
-
+		h.Cap = int64(roundupsize(uintptr(pre.Cap + int64(len(elems)))))
 		sz := int(h.Cap) * elemSz
 		h.Data = ac.alloc(int64(sz))
 		memmoveNoHeapPointers(h.Data, pre.Data, uintptr(int(pre.Len)*elemSz))
 	}
 
 	// append
-	src := (*sliceHeader)(unsafe.Pointer(&elems))
 	memmoveNoHeapPointers(unsafe.Add(h.Data, elemSz*int(h.Len)), src.Data, uintptr(elemSz*int(src.Len)))
 	h.Len += src.Len
+
+	return s
+}
+
+// Append append slice
+func Append[T any](ac *Allocator, s []T, elem T) []T {
+	h := (*sliceHeader)(unsafe.Pointer(&s))
+	elemSz := int(unsafe.Sizeof(elem))
+
+	// grow
+	if h.Len+1 > h.Cap {
+		pre := *h
+		h.Cap = int64(roundupsize(uintptr(pre.Cap + 1)))
+		sz := int(h.Cap) * elemSz
+		h.Data = ac.alloc(int64(sz))
+		memmoveNoHeapPointers(h.Data, pre.Data, uintptr(int(pre.Len)*elemSz))
+	}
+
+	// append
+	*(*T)(unsafe.Add(h.Data, elemSz*int(h.Len))) = elem
+	h.Len += 1
+
+	return s
+}
+
+// AppendInplaceMulti 与 NewSlice 之间没有任何新的内存分配时使用
+func AppendInplaceMulti[T any](ac *Allocator, s []T, elems ...T) []T {
+	if len(elems) == 0 {
+		return s
+	}
+
+	h := (*sliceHeader)(unsafe.Pointer(&s))
+	elemSz := int(unsafe.Sizeof(elems[0]))
+	src := (*sliceHeader)(unsafe.Pointer(&elems))
+
+	// grow
+	if h.Len+src.Len > h.Cap {
+		pre := *h
+		newcap := int64(roundupsize(uintptr(pre.Cap + int64(len(elems)))))
+		if ac.curBlock.Len+newcap-h.Cap < ac.curBlock.Cap {
+			ac.curBlock.Len += newcap - h.Cap
+		} else {
+			sz := int(newcap) * elemSz
+			h.Data = ac.alloc(int64(sz))
+			memmoveNoHeapPointers(h.Data, pre.Data, uintptr(int(pre.Len)*elemSz))
+		}
+		h.Cap = newcap
+	}
+
+	// append
+	memmoveNoHeapPointers(unsafe.Add(h.Data, elemSz*int(h.Len)), src.Data, uintptr(elemSz*int(src.Len)))
+	h.Len += src.Len
+
+	return s
+}
+
+// AppendInplace 与 NewSlice 之间没有任何新的内存分配时使用
+func AppendInplace[T any](ac *Allocator, s []T, elems T) []T {
+	h := (*sliceHeader)(unsafe.Pointer(&s))
+	elemSz := int(unsafe.Sizeof(elems))
+
+	// grow
+	if h.Len+1 > h.Cap {
+		pre := *h
+		newcap := int64(roundupsize(uintptr(pre.Cap + 1)))
+		if ac.curBlock.Len+newcap-h.Cap < ac.curBlock.Cap {
+			ac.curBlock.Len += newcap - h.Cap
+		} else {
+			sz := int(newcap) * elemSz
+			h.Data = ac.alloc(int64(sz))
+			memmoveNoHeapPointers(h.Data, pre.Data, uintptr(int(pre.Len)*elemSz))
+		}
+		h.Cap = newcap
+	}
+
+	// append
+	*(*T)(unsafe.Add(h.Data, elemSz*int(h.Len))) = elems
+	h.Len += 1
 
 	return s
 }

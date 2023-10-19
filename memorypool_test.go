@@ -49,14 +49,14 @@ func TestNewSlice(t *testing.T) {
 		t2.a = "anihao2" + string(tmpstr)
 		t2.b = 122
 
-		a = Append[*testNew](ac, a, t1, t2)
+		a = AppendMulti[*testNew](ac, a, t1, t2)
 		tf.t = a
 		return tf
 	}
 	tf := f([]byte(strconv.Itoa(int(tmpInt))))
 
 	b := NewSlice[testNew](ac, 0, 100)
-	b = Append[testNew](ac, b, []testNew{{a: "bnihaob", b: 123}}...)
+	b = AppendMulti[testNew](ac, b, []testNew{{a: "bnihaob", b: 123}}...)
 
 	runtime.GC()
 
@@ -75,10 +75,11 @@ func TestSliceAppend(t *testing.T) {
 	ac := NewAlloctorFromPool(0)
 	a := NewSlice[testNew](ac, 0, 1)
 	for i := 0; i < maxn; i++ {
-		a = Append[testNew](ac, a, []testNew{{a: "nihao", b: 12}, {a: "nihao2", b: 21}}...)
+		a = AppendMulti[testNew](ac, a, []testNew{{a: "nihao", b: 12}, {a: "nihao2", b: 21}}...)
 	}
 	t.Logf("%s %d\n", a[0].a, a[0].b)
 	t.Logf("[first] bidx: %d, blocks: %d\n", ac.bidx, len(ac.blocks))
+	assert.EqualValues(t, len(a), maxn*2)
 
 	for i := 0; i < maxn; i++ {
 		if i%2 != 0 {
@@ -95,9 +96,68 @@ func TestSliceAppend(t *testing.T) {
 	ac = NewAlloctorFromPool(0)
 	a = NewSlice[testNew](ac, 0, 1)
 	for i := 0; i < maxn; i++ {
-		a = Append[testNew](ac, a, []testNew{{a: "nihao", b: 12}, {a: "nihao2", b: 21}}...)
+		a = AppendMulti[testNew](ac, a, []testNew{{a: "nihao", b: 12}, {a: "nihao2", b: 21}}...)
 	}
 	t.Logf("[second] bidx: %d, blocks: %d\n", ac.bidx, len(ac.blocks))
+	runtime.KeepAlive(ac)
+}
+
+// TestSliceAppend1 交错slice append
+func TestSliceAppend1(t *testing.T) {
+	ac := NewAlloctorFromPool(0)
+	a1 := NewSlice[int](ac, 0, 1)
+	a1 = AppendMulti[int](ac, a1, []int{1, 2}...) // 扩容
+	a2 := NewSlice[int](ac, 0, 2)
+	a2 = AppendMulti[int](ac, a2, []int{3, 4}...) // 不扩容
+	a3 := NewSlice[int](ac, 0, 1)
+	a3 = AppendMulti[int](ac, a3, []int{5, 6}...) // 扩容
+
+	assert.EqualValues(t, 1, a1[0])
+	assert.EqualValues(t, 2, a1[1])
+	assert.EqualValues(t, 3, a2[0])
+	assert.EqualValues(t, 4, a2[1])
+	assert.EqualValues(t, 5, a3[0])
+	assert.EqualValues(t, 6, a3[1])
+
+	runtime.KeepAlive(ac)
+}
+
+// TestSliceAppend2 slice 扩容机制
+func TestSliceAppend2(t *testing.T) {
+	ac := NewAlloctorFromPool(0)
+	a1 := NewSlice[int](ac, 0, 1)
+	for i := 0; i < 10_000; i++ {
+		a1 = AppendMulti[int](ac, a1, []int{1, 2}...) // 扩容
+		// t.Log(len(a1), cap(a1))
+		assert.EqualValues(t, roundupsize(uintptr(len(a1))), cap(a1))
+	}
+	for i := 0; i < 10_000; i++ {
+		if i&1 == 0 {
+			assert.EqualValues(t, 1, a1[i])
+		} else {
+			assert.EqualValues(t, 2, a1[i])
+		}
+	}
+
+	runtime.KeepAlive(ac)
+}
+
+// TestSliceAppendInplace3 slice 原地扩容机制
+func TestSliceAppendInplace3(t *testing.T) {
+	ac := NewAlloctorFromPool(0)
+	a1 := NewSlice[int](ac, 0, 1)
+	for i := 0; i < 100_000; i++ {
+		a1 = AppendInplaceMulti[int](ac, a1, []int{1, 2}...) // 扩容
+		assert.EqualValues(t, roundupsize(uintptr(len(a1))), cap(a1))
+	}
+	for i := 0; i < 100_000; i++ {
+		if i&1 == 0 {
+			assert.EqualValues(t, 1, a1[i])
+		} else {
+			assert.EqualValues(t, 2, a1[i])
+		}
+	}
+
 	runtime.KeepAlive(ac)
 }
 

@@ -1,1 +1,1 @@
-go test -benchmem -run=^$ -bench ^Benchmark github.com/userpro/linearpool -v -count=1 -benchtime=5s
+go test -benchmem -run=^$ -bench ^Benchmark github.com/userpro/linearpool -v -count=1 -benchtime=3s

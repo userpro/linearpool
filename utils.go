@@ -62,6 +62,10 @@ type reflectedValue struct {
 	flag uintptr
 }
 
+//go:linkname roundupsize runtime.roundupsize
+//go:noescape
+func roundupsize(size uintptr) uintptr
+
 //go:linkname memclrNoHeapPointers reflect.memclrNoHeapPointers
 //go:noescape
 func memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
@@ -112,6 +116,13 @@ func max[T number](a, b T) T {
 		return a
 	}
 	return b
+}
+
+func min[T number](a, b T) T {
+	if a > b {
+		return b
+	}
+	return a
 }
 
 type Logger interface {
