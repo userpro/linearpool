@@ -200,7 +200,6 @@ func NewSlice[T any](ac *Allocator, len, cap int) (r []T) {
 
 	slice := (*sliceHeader)(unsafe.Pointer(&r))
 	var t T
-	// fmt.Println(cap, unsafe.Sizeof(t2))
 	slice.Data = ac.alloc(int64(cap) * int64(unsafe.Sizeof(t)))
 	slice.Len = int64(len)
 	slice.Cap = int64(cap)
@@ -309,6 +308,15 @@ func AppendInplace[T any](ac *Allocator, s []T, elem T) []T {
 	h.Len += 1
 
 	return s
+}
+
+// AppendInbound 确定范围内 append
+func AppendInbound[T any](ac *Allocator, s []T, elem T) []T {
+	if len(s)+1 > cap(s) {
+		panic(fmt.Sprintf("%v append out of bound", elem))
+	}
+
+	return append(s, elem)
 }
 
 // NewString 从内存池分配 string
