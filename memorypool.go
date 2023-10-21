@@ -313,7 +313,7 @@ func AppendInplace[T any](ac *Allocator, s []T, elem T) []T {
 // AppendInbound 确定范围内 append
 func AppendInbound[T any](ac *Allocator, s []T, elem T) []T {
 	if len(s)+1 > cap(s) {
-		panic(fmt.Sprintf("%v append out of bound", elem))
+		panic(fmt.Sprintf("index %d out of bound cap %d", len(s), cap(s)))
 	}
 
 	return append(s, elem)
