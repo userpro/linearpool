@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strconv"
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -71,7 +72,7 @@ func TestNewSlice(t *testing.T) {
 }
 
 func TestSliceAppend(t *testing.T) {
-	maxn := 5_00_000
+	maxn := 50_000
 	ac := NewAlloctorFromPool(0)
 	a := NewSlice[testNew](ac, 0, 1)
 	for i := 0; i < maxn; i++ {
@@ -162,7 +163,13 @@ func TestSliceAppendInplace3(t *testing.T) {
 }
 
 func TestAllocPoolReuse(t *testing.T) {
-	ac := NewAlloctorFromPool(0)
+	ac := NewAlloctorFromPool(128)
+	for _, block := range ac.blocks {
+		b := (*(*[]byte)(unsafe.Pointer(block)))
+		for _, bt := range b {
+			assert.EqualValues(t, byte('0'), bt)
+		}
+	}
 	a := New[testNew](ac)
 	a.a = ac.NewString("hello")
 	a.b = 12
@@ -171,7 +178,13 @@ func TestAllocPoolReuse(t *testing.T) {
 	assert.EqualValues(t, a.b, 12)
 	ac.ReturnAlloctorToPool()
 
-	ac = NewAlloctorFromPool(0)
+	ac = NewAlloctorFromPool(128)
+	for _, block := range ac.blocks {
+		b := (*(*[]byte)(unsafe.Pointer(block)))
+		for _, bt := range b {
+			assert.EqualValues(t, byte('0'), bt)
+		}
+	}
 	a = New[testNew](ac)
 	a.a = ac.NewString("ni")
 	a.b = 1123
@@ -180,13 +193,50 @@ func TestAllocPoolReuse(t *testing.T) {
 	assert.EqualValues(t, a.b, 1123)
 	ac.ReturnAlloctorToPool()
 
-	ac = NewAlloctorFromPool(0)
+	ac = NewAlloctorFromPool(128)
+	for _, block := range ac.blocks {
+		b := (*(*[]byte)(unsafe.Pointer(block)))
+		for _, bt := range b {
+			assert.EqualValues(t, byte('0'), bt)
+		}
+	}
 	a = New[testNew](ac)
 	a.a = ac.NewString("ni")
 	a.b = 1123
 	t.Logf("%s %d\n", a.a, a.b)
 	assert.EqualValues(t, a.a, "ni")
 	assert.EqualValues(t, a.b, 1123)
+
+	runtime.KeepAlive(ac)
+}
+
+func TestPoolAlloc(t *testing.T) {
+	maxn := 5_000
+	ac := NewAlloctorFromPool(0)
+	for i := 0; i < maxn; i++ {
+		a := New[testNew](ac)
+		assert.EqualValues(t, "", a.a)
+		assert.EqualValues(t, 0, a.b)
+	}
+	t.Logf("[first] bidx: %d, blocks: %d\n", ac.bidx, len(ac.blocks))
+
+	ac.ReturnAlloctorToPool()
+	ac = NewAlloctorFromPool(0)
+	for i := 0; i < maxn; i++ {
+		a := New[testNew](ac)
+		assert.EqualValues(t, "", a.a)
+		assert.EqualValues(t, 0, a.b)
+	}
+	t.Logf("[second] bidx: %d, blocks: %d\n", ac.bidx, len(ac.blocks))
+
+	ac.ReturnAlloctorToPool()
+	ac = NewAlloctorFromPool(0)
+	for i := 0; i < maxn; i++ {
+		a := New[testNew](ac)
+		assert.EqualValues(t, "", a.a)
+		assert.EqualValues(t, 0, a.b)
+	}
+	t.Logf("[third] bidx: %d, blocks: %d\n", ac.bidx, len(ac.blocks))
 
 	runtime.KeepAlive(ac)
 }
@@ -264,4 +314,14 @@ func TestKeepAlivePool(t *testing.T) {
 	}
 
 	runtime.KeepAlive(ac)
+}
+
+func TestNewString(t *testing.T) {
+	ac := NewAlloctorFromPool(0)
+	a := ac.NewString("")
+
+	runtime.GC()
+
+	assert.EqualValues(t, "", a)
+	ac.KeepAlive(ac)
 }

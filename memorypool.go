@@ -267,8 +267,10 @@ func AppendInplaceMulti[T any](ac *Allocator, s []T, elems ...T) []T {
 	if h.Len+src.Len > h.Cap {
 		pre := *h
 		newcap := int64(roundupsize(uintptr(pre.Cap + int64(len(elems)))))
-		if ac.curBlock.Len+newcap-h.Cap < ac.curBlock.Cap {
-			ac.curBlock.Len += newcap - h.Cap
+		curB := ac.curBlock
+		growthInplace := (newcap - pre.Cap) * int64(elemSz)
+		if curB.Len+growthInplace < curB.Cap {
+			curB.Len += growthInplace
 		} else {
 			sz := int(newcap) * elemSz
 			h.Data = ac.alloc(int64(sz))
