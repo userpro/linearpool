@@ -1,4 +1,4 @@
-module git.woa.com/trpc-vtproto/common/linearpool
+module github.com/userpro/linearpool
 
 go 1.20
 
