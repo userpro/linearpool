@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	DiKB      int64 = 1 << 10
-	DiMB      int64 = DiKB << 10
-	DiGB      int64 = DiMB << 10
-	blockSize int64 = DiKB * 4 // 4KB/block
+	DiKB             int64 = 1 << 10
+	DiMB             int64 = DiKB << 10
+	DiGB             int64 = DiMB << 10
+	defaultBlockSize int64 = DiKB * 4 // 4KB/block
 )
 
 var (
@@ -43,15 +43,19 @@ type Allocator struct {
 	subAlloctor []*Allocator // 子分配器
 }
 
-// NewAlloctorFromPool 新建分配池
-func NewAlloctorFromPool(sz int64) *Allocator {
+// NewAlloctorFromPool 新建分配池, blocksize >= bsize
+func NewAlloctorFromPool(bsize int64) *Allocator {
 	ac := allocatorPool.Get().(*Allocator)
-	if sz <= 0 {
-		sz = blockSize
+	if bsize <= 0 {
+		bsize = defaultBlockSize
 	}
-	ac.blockSize = sz
 
-	if ac.bidx < 0 {
+	if ac.bidx < 0 { // 新建 alloctor
+		ac.blockSize = bsize
+		ac.newBlock()
+	} else if ac.blockSize < bsize { // 如果准备复用的 blocksize 小于所需要的, 则需要重新分配
+		ac.clearBlock()
+		ac.blockSize = bsize
 		ac.newBlock()
 	}
 	return ac
@@ -78,6 +82,11 @@ func (ac *Allocator) newBlock() *sliceHeader {
 	ac.curBlock = b
 	ac.blocks = append(ac.blocks, b)
 	return b
+}
+
+func (ac *Allocator) clearBlock() {
+	ac.curBlock = nil
+	ac.blocks = nil
 }
 
 func (ac *Allocator) alloc(need int64) unsafe.Pointer {
