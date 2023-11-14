@@ -39,6 +39,8 @@ type Allocator struct {
 	externalString []unsafe.Pointer
 	externalMap    []any
 	externalFunc   []any
+
+	subAlloctor []*Allocator // 子分配器
 }
 
 // NewAlloctorFromPool 新建分配池
@@ -130,6 +132,12 @@ func (ac *Allocator) Reset() {
 	ac.externalString = ac.externalString[:0]
 	ac.externalMap = ac.externalMap[:0]
 	ac.externalFunc = ac.externalFunc[:0]
+
+	for i, subAc := range ac.subAlloctor {
+		subAc.Reset()
+		ac.subAlloctor[i] = nil
+	}
+	ac.subAlloctor = ac.subAlloctor[:0]
 }
 
 // ReturnAlloctorToPool 归还分配池
@@ -141,6 +149,16 @@ func (ac *Allocator) ReturnAlloctorToPool() {
 // BlockSize 获取当前内存池的 blocksize
 func (ac *Allocator) BlockSize() int64 {
 	return ac.blockSize
+}
+
+// AddSubAlloctor 新增子分配器
+func (ac *Allocator) AddSubAlloctor(sub *Allocator) {
+	ac.subAlloctor = append(ac.subAlloctor, sub)
+}
+
+// SubAlloctor 获取子分配器
+func (ac *Allocator) SubAlloctor() []*Allocator {
+	return ac.subAlloctor
 }
 
 // Merge 合并其他内存池

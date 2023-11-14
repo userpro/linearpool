@@ -319,9 +319,29 @@ func TestKeepAlivePool(t *testing.T) {
 func TestNewString(t *testing.T) {
 	ac := NewAlloctorFromPool(0)
 	a := ac.NewString("")
+	b := ac.NewString("b")
 
 	runtime.GC()
 
 	assert.EqualValues(t, "", a)
+	assert.EqualValues(t, "b", b)
 	ac.KeepAlive(ac)
+}
+
+func TestSubAlloctor(t *testing.T) {
+	ac := NewAlloctorFromPool(0)
+	a := ac.NewString("123")
+	ac1 := NewAlloctorFromPool(0)
+	b := ac1.NewString("123")
+	ac.AddSubAlloctor(ac1)
+
+	runtime.GC()
+
+	assert.EqualValues(t, "123", a)
+	assert.EqualValues(t, "123", b)
+
+	ac.ReturnAlloctorToPool()
+
+	ac.KeepAlive(ac)
+	ac.KeepAlive(ac1)
 }
